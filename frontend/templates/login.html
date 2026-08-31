@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Entrar · GeoDesk{% endblock %}
+
+{% block content %}
+<main class="login-page">
+    <section class="login-visual">
+        <div class="login-visual-inner">
+            <div class="login-brand"><img src="/static/img/logo.png" alt="" class="login-logo"></div>
+            <div class="login-map-art" aria-hidden="true"><div class="map-art-grid"></div><div class="map-art-shape shape-a"></div><div class="map-art-shape shape-b"></div></div>
+            <div class="login-copy"><span>ESPAÇO DE TRABALHO GEOGRÁFICO</span><h2>Seus mapas.<br>Seu espaço de trabalho.</h2><p>Organize dados geográficos e desenhos em um único lugar.</p></div>
+        </div>
+    </section>
+    <section class="login-panel">
+        <div class="login-form-wrap">
+            <div class="login-mobile-brand"><img src="/static/img/logo.png" alt="" class="login-logo"></div>
+            <span class="login-eyebrow">Bem-vindo de volta</span>
+            <h1>Entrar</h1><p class="login-subtitle">Acesse seus projetos e espaços de trabalho.</p>
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            <form method="post" class="login-form"><label for="username">Usuário</label><input id="username" name="username" autocomplete="username" required autofocus placeholder="Digite seu usuário"><label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required placeholder="Digite sua senha"><button class="login-submit" type="submit">Entrar <span>→</span></button></form>
+            <p class="login-footer">Espaço de trabalho para mapas, dados e desenho</p>
+        </div>
+    </section>
+</main>
+{% endblock %}

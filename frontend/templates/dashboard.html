@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Projetos · GeoDesk{% endblock %}
+
+{% block content %}
+<div class="figma-app">
+    <aside class="sidebar">
+        <div class="brand-row">
+            <img src="/static/img/logo.png" alt="" class="dashboard-logo">
+            <button class="icon-button sidebar-collapse" type="button" aria-label="Menu">⌄</button>
+        </div>
+        <nav class="side-nav" aria-label="Navegação">
+            <a class="side-link active" href="/dashboard"><span class="nav-icon">⌂</span><span>Recentes</span></a>
+        </nav>
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-bottom">
+            <div class="side-user"><div class="avatar">{{ username[:1]|upper }}</div><div class="side-user-info"><strong>{{ username }}</strong><span>Conta</span></div></div>
+            <form method="post" action="/logout"><button class="logout-button" type="submit">Sair</button></form>
+        </div>
+    </aside>
+
+    <main class="workspace">
+        <header class="topbar">
+    <link rel="icon" type="image/svg+xml" href="/static/assets/geodesk-icon.svg">
+            <div class="product-switcher"><span class="product-dot"></span><span>Projetos</span></div>
+            <div class="top-actions"><button class="top-button" type="button">Ajuda</button><div class="top-avatar">{{ username[:1]|upper }}</div></div>
+        </header>
+        <section class="content">
+            <div class="content-heading">
+                <div><h1>Recentes</h1><div class="tabs"><button class="tab active" type="button">Projetos</button></div></div>
+                <button class="create-button" type="button" data-open-modal="create-project-modal"><span class="plus">+</span>Novo projeto</button>
+            </div>
+            {% if projects %}
+            <section class="project-grid" aria-label="Projetos">
+                {% for project in projects %}
+                <article class="project-card" data-project-card>
+                    <a class="project-preview" href="/projects/{{ project.id }}" aria-label="Abrir {{ project.name }}">
+                        <div class="preview-canvas" data-project-preview="{{ project.id }}"><div class="preview-grid"></div></div>
+                    </a>
+                    <div class="project-info">
+                        <a class="project-name" href="/projects/{{ project.id }}">{{ project.name }}</a>
+                        <div class="project-meta"><span class="project-online-state" data-online="{{ 'true' if project.is_public else 'false' }}"><i class="{{ 'is-online' if project.is_public else 'is-offline' }}"></i><em>{{ 'Online' if project.is_public else 'Offline' }}</em></span><span>·</span><span>{{ project.updated_at.strftime('%d/%m/%Y') if project.updated_at else '' }}</span></div>
+                    </div>
+                    <button class="card-menu-button" type="button" data-menu-button aria-label="Opções de {{ project.name }}">⋯</button>
+                    <div class="card-menu" data-menu><a href="/projects/{{ project.id }}">Abrir projeto</a><button type="button" data-rename-project data-project-id="{{ project.id }}" data-project-name="{{ project.name }}">Renomear</button><button class="danger" type="button" data-delete-project data-project-id="{{ project.id }}" data-project-name="{{ project.name }}">Excluir</button></div>
+                </article>
+                {% endfor %}
+            </section>
+            {% else %}
+            <section class="empty-state"><div class="empty-illustration"><div class="empty-square"></div><div class="empty-circle"></div></div><h2>Crie seu primeiro projeto</h2><p>Combine mapa, dados geográficos e desenhos em um único espaço.</p><button class="create-button" type="button" data-open-modal="create-project-modal"><span class="plus">+</span>Novo projeto</button></section>
+            {% endif %}
+        </section>
+    </main>
+</div>
+
+<div class="modal-backdrop" id="create-project-modal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="create-title"><div class="modal-header"><div><span class="modal-kicker">Novo</span><h2 id="create-title">Criar projeto</h2></div><button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button></div><form method="post" action="/projects"><label class="modal-label" for="create-name">Nome do projeto</label><input class="modal-input" id="create-name" name="name" required maxlength="200" placeholder="Ex.: Base Geo"><div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancelar</button><button class="primary-button" type="submit">Criar</button></div></form></div></div>
+<div class="modal-backdrop" id="rename-project-modal" hidden><div class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="rename-title"><div class="modal-header"><div><span class="modal-kicker">Projeto</span><h2 id="rename-title">Renomear</h2></div><button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button></div><form id="rename-form" method="post"><label class="modal-label" for="rename-name">Nome</label><input class="modal-input" id="rename-name" name="name" required maxlength="200"><div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancelar</button><button class="primary-button" type="submit">Salvar</button></div></form></div></div>
+<div class="modal-backdrop" id="delete-project-modal" hidden><div class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="delete-title"><div class="modal-header"><div><span class="modal-kicker danger-text">Atenção</span><h2 id="delete-title">Excluir projeto?</h2></div><button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button></div><p class="delete-message">O projeto <strong id="delete-project-name"></strong> será removido.</p><form id="delete-form" method="post"><div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancelar</button><button class="danger-button" type="submit">Excluir</button></div></form></div></div>
+{% endblock %}

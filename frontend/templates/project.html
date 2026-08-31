@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · GeoDesk{% endblock %}
+
+{% block content %}
+<div class="editor-app" data-project-id="{{ project.id }}">
+    <div id="map" class="mapbox-map"></div>
+    <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>{{ project.name }}</strong><small>carregando projeto...</small></div>
+    <div id="geo-loading" class="geo-loading" role="status" aria-live="polite" hidden><span class="geo-loading-spinner"></span><span class="geo-loading-text">Carregando camada Geo...</span></div>
+
+    <aside class="editor-layers" aria-label="Camadas">
+        <div class="layers-top">
+            <a class="back-button" href="/dashboard" title="Voltar aos projetos">←</a>
+            <div class="layers-title-wrap">
+                <span class="panel-eyebrow">Projeto</span>
+                <div class="editable-project-name" id="project-name-editor" data-project-id="{{ project.id }}" data-project-name="{{ project.name }}" contenteditable="true" spellcheck="false" role="textbox" aria-label="Nome do projeto">{{ project.name }}</div>
+            </div>
+            
+        </div>
+
+                <div class="layers-list figma-layers">
+            <div class="layer-section" data-section="geo">
+                <button class="layer-section-title" type="button" data-collapse-section="geo"><span class="section-chevron">⌄</span><span>Geo</span><span class="section-count">{{ layers|length }}</span><span class="section-add" data-new-layer="geo" title="Adicionar camada Geo" role="button" tabindex="0">+</span></button>
+                <div class="section-content">
+                    {% for layer in layers %}
+                    <div class="layer-row" data-layer-id="{{ layer.id }}" data-layer-kind="geo">
+                        <span class="layer-grip">⠿</span>
+                        <button class="layer-visibility {{ 'is-visible' if layer.visible else '' }}" type="button" data-layer-toggle aria-label="Alternar {{ layer.name }}">{{ '◉' if layer.visible else '○' }}</button>
+                        {% set geo_type = (layer.style or {}).get('geometry_type', 'mixed')|lower %}<span class="layer-symbol geo-symbol geo-symbol-{{ geo_type }}" title="{{ geo_type }}"></span>
+                        <span class="layer-name">{{ layer.name }}</span>
+                        <button class="layer-more" type="button" title="Opções da camada">⋯</button>
+                    </div>
+                    {% else %}
+                    <div class="layers-empty compact">Importe um GeoJSON ou Shapefile para começar.</div>
+                    {% endfor %}
+                    <div class="layer-row base-layer" data-layer-kind="base">
+                        <span class="layer-grip">⠿</span>
+                        <button class="layer-visibility is-visible" type="button" data-layer-toggle-base aria-label="Alternar mapa base">◉</button>
+                        <span class="layer-symbol satellite"></span>
+                        <span class="layer-name">Mapa base</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layer-section" data-section="drawing">
+                <button class="layer-section-title" type="button" data-collapse-section="drawing"><span class="section-chevron">⌄</span><span>Desenhos</span><span class="section-count" id="drawing-layer-count">0</span><span class="section-add" data-new-layer="drawing" title="Adicionar desenho">+</span></button>
+                <div class="section-content" id="drawing-layers-list">
+                    <div class="layers-empty compact" id="drawing-empty">Quadrados, textos, imagens e anotações ficam aqui.</div>
+                </div>
+            </div>
+        </div>
+
+        
+    </aside>
+
+    <header class="editor-topbar">
+    <link rel="icon" type="image/svg+xml" href="/static/assets/geodesk-icon.svg">
+        <div class="editor-toolbar" role="toolbar" aria-label="Ferramentas">
+            <button class="tool-button active" type="button" data-tool="select" title="Selecionar (Esc)"><span class="tool-icon tool-cursor-icon" aria-hidden="true"><svg viewBox="0 0 20 20" focusable="false"><path d="M4 2.5 16 10l-5 1.1 3.2 5.2-2.2 1.2-3.1-5.2-4 3.7z"/></svg></span><span>Selecionar</span><span class="tool-number">Esc</span></button>
+
+            <div class="tool-group"><span class="tool-group-label">Geo</span><div class="geo-tool-buttons"><button class="tool-button geo-tool" type="button" data-tool="geo-point" title="Inserir ponto em uma camada Geo"><span class="tool-icon tool-point-icon">●</span><span>Ponto</span><span class="tool-number">1</span></button><button class="tool-button geo-tool" type="button" data-tool="geo-line" title="Inserir linha em uma camada Geo"><span class="tool-icon tool-line-icon"></span><span>Linha</span><span class="tool-number">2</span></button><button class="tool-button geo-tool" type="button" data-tool="geo-polygon" title="Inserir polígono em uma camada Geo"><span class="tool-icon tool-polygon-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 3.5h10l3 6.5-3 6.5H5L2 10l3-6.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span>Polígono</span><span class="tool-number">3</span></button></div></div>
+            <span class="tool-divider"></span>
+            <button class="tool-button measure-tool-button" type="button" data-tool="measure" title="Régua · medir distância ou área"><span class="tool-icon tool-ruler-icon"></span><span>Régua</span><span class="tool-number">4</span></button>
+            <span class="tool-divider"></span>
+            <div class="tool-group"><span class="tool-group-label">Desenho</span><div class="drawing-tool-buttons"><button class="tool-button" type="button" data-tool="rectangle" title="Retângulo"><span class="tool-icon tool-rectangle-icon"></span><span>Retângulo</span><span class="tool-number">1</span></button><button class="tool-button" type="button" data-tool="ellipse" title="Elipse"><span class="tool-icon tool-ellipse-icon"></span><span>Elipse</span><span class="tool-number">2</span></button><button class="tool-button" type="button" data-tool="curve-line" title="Linha"><span class="tool-icon tool-line-icon"></span><span>Linha</span><span class="tool-number">3</span></button><button class="tool-button" type="button" data-tool="arrow" title="Seta"><span class="tool-icon tool-arrow-icon"></span><span>Seta</span><span class="tool-number">5</span></button><button class="tool-button" type="button" data-tool="text" title="Texto (T)"><span class="tool-icon tool-text-icon">T</span><span>Texto</span><span class="tool-number">6</span></button><button class="tool-button" type="button" data-tool="image" title="Imagem"><span class="tool-icon tool-image-icon"></span><span>Imagem</span><span class="tool-number">7</span></button></div></div>
+            <span class="tool-divider"></span>
+            <div class="editor-mode-switcher" role="tablist" aria-label="Modo de edição">
+                <button type="button" class="editor-mode-button active" data-editor-mode="geo" role="tab" aria-selected="true" title="Modo Geo"><span class="mode-icon mode-icon-geo" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.2"/><path d="M2.9 10h14.2M10 2.8c2 2 3.1 4.4 3.1 7.2S12 15.2 10 17.2C8 15.2 6.9 12.8 6.9 10S8 4.8 10 2.8Z"/><path d="M4.5 5.7c1.7.8 3.5 1.2 5.5 1.2s3.8-.4 5.5-1.2M4.5 14.3c1.7-.8 3.5-1.2 5.5-1.2s3.8.4 5.5 1.2"/></svg></span><span>Geo</span><span class="mode-number">G</span></button>
+                <button type="button" class="editor-mode-button" data-editor-mode="drawing" role="tab" aria-selected="false" title="Modo Desenho"><span class="mode-icon mode-icon-draw" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M4 14.8 13.9 4.9a2 2 0 0 1 2.8 2.8L6.8 17.6 3.7 18l.3-3.2Z"/><path d="m12.7 6.1 2.2 2.2M3.8 14.8l2.2 2.2"/></svg></span><span>Desenho</span><span class="mode-number">D</span></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="editor-project-actions">
+        <button class="connection-status" id="connection-status" type="button" data-online="{{ 'true' if project.is_public else 'false' }}" data-toggle-project-status data-project-id="{{ project.id }}" title="Projeto offline · clique para colocar online">
+            <span class="status-dot"></span><span class="status-label">{{ 'Online' if project.is_public else 'Offline' }}</span>
+        </button>
+        <button class="editor-action" type="button" data-open-modal="share-project-modal">Compartilhar</button>
+        <a class="editor-avatar" href="/dashboard" title="Voltar ao dashboard">{{ username[:1]|upper }}</a>
+    </div>
+
+    <div class="map-style-switcher">
+        <button type="button" data-map-style="streets">Mapa</button>
+        <button type="button" data-map-style="satellite" class="active">Satélite</button>
+    </div>
+
+    <div class="editor-hint" id="editor-hint">Selecione uma ferramenta para começar</div>
+
+    <div class="measure-panel" id="measure-panel" hidden>
+        <div class="measure-panel-head">
+            <strong>Régua</strong>
+            <button type="button" id="measure-close" title="Fechar">×</button>
+        </div>
+        <div class="measure-mode-row">
+            <button type="button" class="measure-mode active" data-measure-mode="distance">Distância</button>
+            <button type="button" class="measure-mode" data-measure-mode="area">Área</button>
+        </div>
+        <label class="measure-unit-row">Unidade
+            <select id="measure-unit">
+                <option value="m">Metros (m)</option>
+                <option value="km">Quilômetros (km)</option>
+                <option value="m2">Metros quadrados (m²)</option>
+                <option value="ha">Hectares (ha)</option>
+            </select>
+        </label>
+        <div class="measure-result" id="measure-result">Clique no mapa para começar a medir.</div>
+        <div class="measure-panel-actions">
+            <button type="button" id="measure-clear">Limpar</button>
+            <span>duplo clique para finalizar</span>
+        </div>
+    </div>
+    <div class="map-attribution">© Mapbox · © OpenStreetMap</div>
+
+    <svg id="drawing-overlay" class="drawing-overlay" aria-label="Área de desenhos"></svg>
+    <input id="drawing-image-input" type="file" hidden accept="image/*">
+</div>
+
+<div class="modal-backdrop" id="geo-import-modal" hidden>
+    <div class="modal geo-import-modal" role="dialog" aria-modal="true" aria-labelledby="geo-import-title">
+        <div class="modal-header">
+            <div><span class="modal-kicker">Geo</span><h2 id="geo-import-title">Adicionar camada</h2></div>
+            <button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button>
+        </div>
+        <div class="geo-import-choice">
+            <button type="button" class="geo-import-card" data-import-file>
+                <span class="geo-import-card-icon">⇧</span><strong>Carregar arquivo</strong><span>GeoJSON ou Shapefile (.zip)</span>
+            </button>
+            <div class="geo-import-card geo-empty-card">
+                <span class="geo-import-card-icon">＋</span><strong>Camada vazia</strong><span>Crie uma camada de ponto, linha ou polígono</span>
+                <div class="geo-empty-types"><button type="button" data-empty-geo="Point">● Ponto</button><button type="button" data-empty-geo="LineString">╱ Linha</button><button type="button" data-empty-geo="Polygon">⬠ Polígono</button></div>
+            </div>
+        </div>
+        <input id="geo-file-input" type="file" hidden accept=".geojson,.json,.zip,.shp,.kml">
+        <div id="geo-import-info" class="geo-import-info" hidden></div>
+        <div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancelar</button><button class="primary-button" type="button" id="geo-import-confirm" disabled>Adicionar camada</button></div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="share-project-modal" hidden>
+    <div class="modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+        <div class="modal-header">
+            <div>
+                <span class="modal-kicker">{{ project.name }}</span>
+                <h2 id="share-title">Compartilhar projeto</h2>
+            </div>
+            <button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button>
+        </div>
+        <div class="share-block">
+            <label class="modal-label" for="share-link">Link para compartilhar</label>
+            <div class="share-link-row">
+                <input class="modal-input" id="share-link" value="{{ share_url }}" readonly>
+                <button class="copy-button" type="button" data-copy-link>Copiar</button>
+            </div>
+        </div>
+        {% if can_manage %}
+        <div class="share-block publish-block">
+            <div class="publish-copy"><strong>Publicar projeto</strong><span>Qualquer pessoa com o link poderá visualizar o projeto.</span></div>
+            <form method="post" action="/projects/{{ project.id }}/sharing/public">
+                <input type="hidden" name="is_public" value="{{ 'false' if project.is_public else 'true' }}">
+                <button class="publish-toggle {{ 'is-on' if project.is_public else '' }}" type="button" data-toggle-project-status data-project-id="{{ project.id }}" aria-label="Alternar publicação"><span></span></button>
+            </form>
+        </div>
+        <div class="share-block invite-block">
+            <label class="modal-label" for="share-user">Adicionar colaborador</label>
+            <form method="post" action="/projects/{{ project.id }}/share/member" class="invite-row">
+                <input class="modal-input" id="share-user" name="username" required placeholder="Nome de usuário">
+                <button class="secondary-button" type="submit">Adicionar</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal-backdrop" id="attribute-table-modal" hidden>
+    <div class="modal attribute-modal" role="dialog" aria-modal="true" aria-labelledby="attribute-table-title">
+        <div class="modal-header">
+            <div><span class="modal-kicker">Geo</span><h2 id="attribute-table-title">Tabela de atributos</h2></div>
+            <button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button>
+        </div>
+        <div class="attribute-table-wrap" id="attribute-table-body"></div>
+    </div>
+</div>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/shpjs@6.1.0/dist/shp.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
+<script>
+window.WEBGIS_MAP = {
+    token: {{ mapbox_token|tojson }},
+    projectId: {{ project_id|tojson }},
+    projectName: {{ project.name|tojson }},
+    layers: {{ layer_config|tojson }},
+    geojsonUrl: "/api/projects/{{ project.id }}/geojson"
+};
+</script>
+{% endblock %}

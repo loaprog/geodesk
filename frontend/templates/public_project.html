@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · GeoDesk{% endblock %}
+
+{% block content %}
+<div class="editor-app public-editor">
+    <div id="map" class="mapbox-map"></div>
+    <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>Carregando projeto</strong><small>Preparando camadas e desenhos…</small></div>
+
+    <aside class="editor-layers" aria-label="Camadas">
+        <div class="layers-top">
+            <div class="layers-title-wrap"><span class="panel-eyebrow">Visualização</span><div class="editable-project-name">{{ project.name }}</div></div>
+            <span class="public-badge">Publicado</span>
+        </div>
+        <div class="layers-list figma-layers">
+            <div class="layer-section" data-section="geo">
+                <div class="layer-section-title"><span class="section-chevron">⌄</span><span>Geo</span><span class="section-count">{{ layers|length }}</span></div>
+                <div class="section-content">
+                    {% for layer in layers %}
+                    <div class="layer-row" data-layer-id="{{ layer.id }}" data-layer-kind="geo">
+                        <span class="layer-grip">⠿</span>
+                        <button class="layer-visibility {{ 'is-visible' if layer.visible else '' }}" type="button" data-layer-toggle aria-label="Alternar {{ layer.name }}">{{ '◉' if layer.visible else '○' }}</button>
+                        <span class="layer-symbol layer-geojson"></span><span class="layer-name">{{ layer.name }}</span><button class="layer-more" type="button" title="Opções da camada">⋯</button>
+                    </div>
+                    {% else %}<div class="layers-empty compact">Nenhuma camada adicionada.</div>{% endfor %}
+                    <div class="layer-row base-layer" data-layer-kind="base">
+                        <span class="layer-grip"></span><button class="layer-visibility is-visible" type="button" data-layer-toggle-base aria-label="Alternar mapa base">◉</button><span class="layer-symbol satellite"></span><span class="layer-name">Mapa base</span>
+                    </div>
+                </div>
+            </div>
+            <div class="layer-section" data-section="drawing">
+                <div class="layer-section-title"><span class="section-chevron">⌄</span><span>Desenhos</span><span class="section-count" id="drawing-layer-count">0</span></div>
+                <div class="section-content" id="drawing-layers-list"><div class="layers-empty compact" id="drawing-empty">Nenhum desenho.</div></div>
+            </div>
+        </div>
+    </aside>
+
+    <header class="editor-topbar public-toolbar" role="toolbar" aria-label="Ferramentas de visualização">
+    <link rel="icon" type="image/svg+xml" href="/static/assets/geodesk-icon.svg"><div class="editor-toolbar"><button class="tool-button active" type="button" data-tool="select" title="Selecionar (Esc)"><span class="tool-icon tool-cursor-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M4 2.5 16 10l-5 1.1 3.2 5.2-2.2 1.2-3.1-5.2-4 3.7z"/></svg></span><span>Selecionar</span><span class="tool-number">Esc</span></button><button class="tool-button measure-tool-button" type="button" data-tool="measure" title="Régua · medir distância ou área"><span class="tool-icon tool-ruler-icon"></span><span>Régua</span><span class="tool-number">1</span></button></div></header>
+    <div class="editor-project-actions"><div class="connection-status"><span class="status-dot is-online"></span><span class="status-label">Online</span></div></div>
+    <div class="map-style-switcher"><button type="button" data-map-style="streets">Mapa</button><button type="button" data-map-style="satellite" class="active">Satélite</button></div>
+    <div class="editor-hint" id="editor-hint">Selecione uma ferramenta para começar</div>
+    <div class="measure-panel" id="measure-panel" hidden>
+        <div class="measure-panel-head"><strong>Régua</strong><button type="button" id="measure-close" aria-label="Fechar">×</button></div>
+        <div class="measure-mode-row"><button type="button" class="measure-mode active" data-measure-mode="distance">Distância</button><button type="button" class="measure-mode" data-measure-mode="area">Área</button></div>
+        <div class="measure-unit-row"><span>Unidade</span><select id="measure-unit"><option value="m">m</option><option value="km">km</option><option value="m2">m²</option><option value="ha">ha</option></select></div>
+        <div class="measure-result" id="measure-result">Clique no mapa para marcar o início da distância.</div>
+        <div class="measure-panel-actions"><span>Duplo clique finaliza</span><button type="button" id="measure-clear">Limpar</button></div>
+    </div>
+    <div class="map-attribution">© Mapbox · © OpenStreetMap</div>
+    <svg id="drawing-overlay" class="drawing-overlay" aria-label="Área de desenhos"></svg>
+</div>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet">
+<script>
+window.WEBGIS_MAP = {
+    token: {{ mapbox_token|tojson }},
+    projectId: {{ project.share_token|tojson }},
+    projectName: {{ project.name|tojson }},
+    layers: {{ layer_config|tojson }},
+    geojsonUrl: "/api/public/{{ project.share_token }}/geojson",
+    public: true
+};
+</script>
+
+<div class="modal-backdrop" id="attribute-table-modal" hidden>
+    <div class="modal attribute-modal" role="dialog" aria-modal="true" aria-labelledby="attribute-table-title">
+        <div class="modal-header"><div><span class="modal-kicker">Geo</span><h2 id="attribute-table-title">Tabela de atributos</h2></div><button class="modal-close" type="button" data-close-modal aria-label="Fechar">×</button></div>
+        <div class="attribute-table-wrap" id="attribute-table-body"></div>
+    </div>
+</div>
+{% endblock %}
