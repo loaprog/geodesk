@@ -306,7 +306,7 @@ body.modal-open { overflow: hidden; }
 .project-online-state i { width: 7px; height: 7px; border: 1px solid #aaa; border-radius: 50%; background: #fff; }
 .project-online-state i.is-online { border-color: var(--brand); background: var(--brand); }
 .project-online-state em { font-style: normal; font-size: 10px; }
-.dashboard-logo { width: 100%; height: 30px; object-fit: contain; border-radius: 7px; }
+.dashboard-logo { width: 100%; height: 100%; object-fit: contain; border-radius: 7px; }
 .brand-row:before { display: none; }
 
 /* Login logo emphasis */
