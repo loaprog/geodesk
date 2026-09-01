@@ -61,25 +61,28 @@ function setupDashboard() {
         if (form) form.action = `/projects/${button.dataset.projectId}/delete`;
         if (modal) { modal.hidden = false; document.body.classList.add("modal-open"); }
     }));
-    document.querySelectorAll("[data-project-preview]").forEach(preview => renderDashboardPreview(preview));
+    const previews=[...document.querySelectorAll("[data-project-preview]")];
+    if(previews.length) renderDashboardPreviews(previews);
 }
 
-async function renderDashboardPreview(preview) {
-    const projectId = preview.dataset.projectPreview;
-    if (!projectId) { console.warn("[GeoDesk] Prévia sem data-project-preview definido", preview); return; }
-    const canvas = preview.classList.contains("preview-canvas") ? preview : preview.querySelector(".preview-canvas");
-    if (!canvas) { console.warn("[GeoDesk] Elemento .preview-canvas não encontrado para o projeto", projectId); return; }
-    canvas.querySelectorAll(".preview-art").forEach(el => el.remove());
+async function renderDashboardPreviews(previews) {
     try {
-        const [geoResponse, canvasResponse] = await Promise.all([
-            fetch(`/api/projects/${projectId}/preview`, {headers: {Accept: "application/json", "Cache-Control": "no-cache"}}),
-            fetch(`/api/projects/${projectId}/canvas`, {headers: {Accept: "application/json", "Cache-Control": "no-cache"}})
-        ]);
-        let canvasState = {};
-        if (canvasResponse.ok) canvasState = await canvasResponse.json();
-        if (geoResponse.ok) drawPreviewGeo(canvas, await geoResponse.json(), canvasState.camera, canvasState.viewport);
-        drawPreviewDrawings(canvas, Array.isArray(canvasState.drawings) ? canvasState.drawings : [], canvasState.viewport);
-    } catch (error) { console.error("[GeoDesk] Falha na prévia do projeto",{projectId,error}); }
+        const response=await fetch("/api/dashboard/previews",{headers:{Accept:"application/json"},cache:"default"});
+        if(!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload=await response.json();
+        const byId=payload.projects||{};
+        previews.forEach(preview=>{
+            const projectId=preview.dataset.projectPreview;
+            const canvas=preview.classList.contains("preview-canvas")?preview:preview.querySelector(".preview-canvas");
+            const data=byId[String(projectId)];
+            if(!canvas||!data)return;
+            canvas.querySelectorAll(".preview-art").forEach(el=>el.remove());
+            drawPreviewGeo(canvas,data.geojson||{type:"FeatureCollection",features:[]},data.camera,data.viewport);
+            drawPreviewDrawings(canvas,Array.isArray(data.drawings)?data.drawings:[],data.viewport);
+        });
+    } catch(error) {
+        console.error("[GeoDesk] Falha nas prévias do dashboard",error);
+    }
 }
 
 function drawPreviewGeo(canvas, geojson, camera=null, viewport=null) {
@@ -138,11 +141,13 @@ function drawPreviewGeo(canvas, geojson, camera=null, viewport=null) {
 function drawPreviewDrawings(canvas, drawings, viewport=null) {
     if (!drawings?.length) return;
     const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns,"svg");
-    svg.classList.add("preview-art", "preview-drawings"); svg.setAttribute("viewBox", `0 0 ${Math.max(canvas.clientWidth,1)} ${Math.max(canvas.clientHeight,1)}`);
+    svg.classList.add("preview-art", "preview-drawings");
     const sourceW=Math.max(1,Number(viewport?.width||drawings.reduce((m,d)=>Math.max(m,d.x+(d.w||0)),0)||canvas.clientWidth));
     const sourceH=Math.max(1,Number(viewport?.height||drawings.reduce((m,d)=>Math.max(m,d.y+(d.h||0)),0)||canvas.clientHeight));
-    const sx = canvas.clientWidth/sourceW, sy = canvas.clientHeight/sourceH;
-    drawings.slice(-30).forEach(d => {
+    svg.setAttribute("viewBox", `0 0 ${sourceW} ${sourceH}`);
+    svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+    const sx=1, sy=1;
+    drawings.forEach(d => {
         if (d.visible === false) return;
         if (d.type === "text") { const t=document.createElementNS(ns,"text"); t.setAttribute("x",d.x*sx); t.setAttribute("y",d.y*sy); t.textContent=d.text||"Texto"; t.setAttribute("class","preview-draw-text"); svg.appendChild(t); return; }
         if (d.type === "image" && d.src) { const img=document.createElementNS(ns,"image"); img.setAttribute("href",d.src); img.setAttribute("x",d.x*sx); img.setAttribute("y",d.y*sy); img.setAttribute("width",Math.max(1,d.w*sx)); img.setAttribute("height",Math.max(1,d.h*sy)); img.setAttribute("preserveAspectRatio","xMidYMid slice"); svg.appendChild(img); return; }
@@ -267,7 +272,7 @@ async function initMapEditor() {
     let drawingSourceWidth=0, drawingSourceHeight=0;
     // Token de renderização deve existir antes de qualquer chamada a renderDrawings().
     let drawingRenderToken=0, drawingLayersRenderToken=0;
-    const maybeHideProjectLoading=()=>{ if(dataReady && geoReady && mapReady && drawingsRendered) hideLoading(); };
+    const maybeHideProjectLoading=()=>{ if(dataReady && geoReady && mapReady) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
     // Estado do canvas é pequeno e libera a tela rapidamente. O GeoJSON pode ser grande,
