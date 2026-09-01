@@ -747,3 +747,52 @@ body.right-pressed *{cursor:grabbing !important;}
 }
 .geodesk-brand img { display:block; }
 .geodesk-brand-name span { color: var(--geodesk-primary); }
+
+
+/* v12 — painel de camadas recolhível + navegação touch + desenhos responsivos */
+.layers-collapse{
+    width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;
+    border:1px solid #e1e5e1;border-radius:7px;background:#fff;color:#666;
+    font-size:18px;line-height:1;cursor:pointer;
+}
+.layers-collapse:hover{background:#f4f7f4;color:#28783b;border-color:#cfe0d2}
+.editor-layers.layers-collapsed{width:44px;min-width:44px;}
+.editor-layers.layers-collapsed .layers-top{justify-content:center;padding:9px 7px;}
+.editor-layers.layers-collapsed .layers-top > :not(.layers-collapse),
+.editor-layers.layers-collapsed .layers-list{display:none;}
+.editor-layers.layers-collapsed .layers-collapse{margin:0;}
+
+.drawing-overlay{transform-origin:0 0;}
+.drawing-overlay text{dominant-baseline:auto;}
+
+@media (max-width:760px){
+    .editor-layers{
+        top:8px;left:8px;bottom:auto;
+        width:min(78vw,250px);max-height:calc(100vh - 16px);
+    }
+    .editor-layers.layers-collapsed{width:44px;max-height:none;}
+    .layers-top{min-height:50px;padding:7px 8px;}
+    .editable-project-name{max-width:none;}
+    .public-badge{font-size:9px;padding:5px 7px;}
+    .figma-layers{max-height:calc(100vh - 66px);overflow-y:auto;}
+    .layer-section-title{height:34px;}
+    .layer-row{min-height:34px;}
+    .layers-collapse{width:30px;height:30px;flex-basis:30px;}
+    .measure-panel{
+        left:8px;right:8px;bottom:76px;
+        width:auto;max-width:calc(100vw - 16px);
+        max-height:34vh;overflow:auto;
+        padding:8px;font-size:10px;
+    }
+    .measure-result{padding:7px;min-height:30px;}
+    .measure-mode{height:27px;}
+    .measure-unit-row select{height:27px;}
+    .editor-hint{max-width:calc(100vw - 20px);text-align:center;}
+}
+
+/* Em telas touch o mapa mantém os gestos nativos. No modo desenho, o toque em áreas vazias
+   não fica preso à caixa de seleção, permitindo arrastar o mapa normalmente. */
+.touch-device .mapboxgl-canvas-container,
+.touch-device .mapboxgl-canvas{touch-action:pan-x pan-y pinch-zoom;}
+.touch-device.mode-drawing .drawing-overlay.selection-mode{pointer-events:none;}
+.touch-device.mode-drawing .drawing-overlay.selection-mode > *{pointer-events:auto;}

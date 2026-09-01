@@ -3,6 +3,7 @@ from fastapi import (FastAPI,Request,)
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from src.configs.settings import settings
 from src.routers.auth import router as auth_router
 from src.routers.projects import router as projects_router
@@ -10,6 +11,7 @@ from src.routers.projects import router as projects_router
 BASE = Path(__file__).resolve().parent.parent
 
 app = FastAPI(title=settings.APP_NAME)
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 app.add_middleware(SessionMiddleware,secret_key=settings.SECRET_KEY,session_cookie=settings.SESSION_COOKIE_NAME,https_only=settings.APP_ENV == "production",same_site="lax",max_age=28800)
 
 app.mount("/static",StaticFiles(directory=BASE / "frontend/static"),name="static",)

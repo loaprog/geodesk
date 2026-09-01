@@ -5,16 +5,16 @@
 {% block content %}
 <div class="editor-app public-editor">
     <div id="map" class="mapbox-map"></div>
-    <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>Carregando projeto</strong><small>Preparando camadas e desenhos…</small></div>
+    <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>{{ project.name }}</strong><small>carregando projeto...</small></div>
 
     <aside class="editor-layers" aria-label="Camadas">
         <div class="layers-top">
             <div class="layers-title-wrap"><span class="panel-eyebrow">Visualização</span><div class="editable-project-name">{{ project.name }}</div></div>
-            <span class="public-badge">Publicado</span>
+            <span class="public-badge">Publicado</span><button class="layers-collapse" type="button" data-collapse-layers aria-label="Minimizar painel de camadas" aria-expanded="true">‹</button>
         </div>
         <div class="layers-list figma-layers">
             <div class="layer-section" data-section="geo">
-                <div class="layer-section-title"><span class="section-chevron">⌄</span><span>Geo</span><span class="section-count">{{ layers|length }}</span></div>
+                <button class="layer-section-title" type="button" data-collapse-section="geo"><span class="section-chevron">⌄</span><span>Geo</span><span class="section-count">{{ layers|length }}</span></button>
                 <div class="section-content">
                     {% for layer in layers %}
                     <div class="layer-row" data-layer-id="{{ layer.id }}" data-layer-kind="geo">
@@ -29,7 +29,7 @@
                 </div>
             </div>
             <div class="layer-section" data-section="drawing">
-                <div class="layer-section-title"><span class="section-chevron">⌄</span><span>Desenhos</span><span class="section-count" id="drawing-layer-count">0</span></div>
+                <button class="layer-section-title" type="button" data-collapse-section="drawing"><span class="section-chevron">⌄</span><span>Desenhos</span><span class="section-count" id="drawing-layer-count">0</span></button>
                 <div class="section-content" id="drawing-layers-list"><div class="layers-empty compact" id="drawing-empty">Nenhum desenho.</div></div>
             </div>
         </div>

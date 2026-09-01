@@ -245,42 +245,63 @@ async function initMapEditor() {
     if (!cfg.token) return setLoading("Configure MAPBOX_TOKEN no .env para exibir o mapa.");
     mapboxgl.accessToken = cfg.token;
     const styles = {streets:"mapbox://styles/mapbox/streets-v12", satellite:"mapbox://styles/mapbox/satellite-streets-v12"};
-    const map = new mapboxgl.Map({container:mapEl,style:styles.satellite,center:[-51.9253,-14.235],zoom:4.2,attributionControl:false,projection:"mercator",preserveDrawingBuffer:true,failIfMajorPerformanceCaveat:false,cooperativeGestures:false});
-    // Navegação no estilo Figma: botão esquerdo fica reservado à seleção/edição.
-    // O arraste do mapa é feito exclusivamente com o botão central do mouse.
-    map.dragPan.disable();
+    const map = new mapboxgl.Map({container:mapEl,style:styles.satellite,center:[-51.9253,-14.235],zoom:4.2,attributionControl:false,projection:"mercator",preserveDrawingBuffer:false,failIfMajorPerformanceCaveat:false,cooperativeGestures:false,touchPitch:false});
+    // Desktop: botão esquerdo fica reservado à seleção/edição e o mapa é movido com o botão central.
+    // Touch: usa a navegação nativa do Mapbox (arrastar, pinça e rotação).
+    const touchDevice = window.matchMedia?.("(pointer: coarse)")?.matches || "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const appRoot = document.querySelector(".editor-app");
+    appRoot?.classList.toggle("touch-device", !!touchDevice);
+    if (touchDevice) {
+        map.dragPan.enable();
+        map.scrollZoom.enable();
+        map.touchZoomRotate.enable();
+    } else {
+        map.dragPan.disable();
+    }
     window.geoCanvasMap = map;
     let geojson={type:"FeatureCollection",features:[]};
     cfg.layers=(cfg.layers||[]).map((l,i)=>typeof l === "string" ? {id:l,name:`Camada ${i+1}`,visible:true,z_index:i} : l);
     let drawings=[], geoDrawPoints=[], geoDrawCursor=null, geoCurveDraft=null, currentTool="select", editorMode="geo", drawing=null, drawingMarquee=null, selected={type:null,id:null,layerId:null}, selectedDrawingIds=[], drawingClipboard=null, undoStack=[], redoStack=[], editingFeature=null, vertexHandles=[], selectedVertex=null, basemapVisible=true, savedCamera=null, canvasViewport=null, smartGuides=[];
     let measureMode="distance", measureUnit="m", measurePoints=[], measureFinished=false;
-    let dataReady=false, mapReady=false;
+    let dataReady=false, mapReady=false, geoReady=false;
+    let drawingSourceWidth=0, drawingSourceHeight=0;
     const maybeHideProjectLoading=()=>{ if(dataReady && mapReady) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
-    // Carrega Geo + desenhos em paralelo. A tela branca é usada somente na entrada do projeto.
+    // Estado do canvas é pequeno e libera a tela rapidamente. O GeoJSON pode ser grande,
+    // então ele continua baixando em paralelo sem bloquear a primeira pintura do mapa.
     setLoading("carregando projeto...");
-    
+    const stateUrl=cfg.public ? `/api/public/${cfg.projectId}/canvas` : `/api/projects/${cfg.projectId}/canvas`;
+    const geoPromise=fetch(cfg.geojsonUrl,{headers:{Accept:"application/json"},cache:"default"});
+    const canvasPromise=fetch(stateUrl,{headers:{Accept:"application/json"},cache:"default"});
     try {
-        const stateUrl=cfg.public ? `/api/public/${cfg.projectId}/canvas` : `/api/projects/${cfg.projectId}/canvas`;
-        const results=await Promise.allSettled([
-            fetch(cfg.geojsonUrl,{headers:{Accept:"application/json"},cache:"no-store"}),
-            fetch(stateUrl,{headers:{Accept:"application/json"},cache:"no-store"})
-        ]);
-        const [geoResult,canvasResult]=results;
-        if(geoResult.status==="fulfilled") {
-            const response=geoResult.value;
-            if(!response.ok) throw new Error(`GeoJSON HTTP ${response.status}`);
-            geojson=await response.json();
-            if(!geojson || geojson.type!=="FeatureCollection" || !Array.isArray(geojson.features)) throw new Error("Resposta GeoJSON inválida");
-        } else console.error("[GeoDesk] Falha ao carregar GeoJSON:",geoResult.reason);
-        if(canvasResult.status==="fulfilled") {
-            const response=canvasResult.value;
-            if(response.ok){ const state=await response.json(); drawings=Array.isArray(state.drawings)?state.drawings:[]; basemapVisible=state.basemap_visible!==false; savedCamera=state.camera||null; canvasViewport=state.viewport||null; }
-            else console.error(`[GeoDesk] Falha ao carregar desenhos: HTTP ${response.status}`);
-        } else console.error("[GeoDesk] Falha ao carregar desenhos:",canvasResult.reason);
-        dataReady=true;
-    } catch(e){ console.error("[GeoDesk] Erro no carregamento inicial:",e); dataReady=true; }
+        const response=await canvasPromise;
+        if(response.ok){
+            const state=await response.json();
+            drawings=Array.isArray(state.drawings)?state.drawings:[];
+            basemapVisible=state.basemap_visible!==false;
+            savedCamera=state.camera||null;
+            canvasViewport=state.viewport||null;
+        } else console.error(`[GeoDesk] Falha ao carregar desenhos: HTTP ${response.status}`);
+    } catch(e){ console.error("[GeoDesk] Falha ao carregar estado do canvas:",e); }
+    dataReady=true;
+    syncDrawingViewport();
+    if(map.loaded()) {
+        addDataLayers(); map.resize(); applyBasemapVisibility();
+        if(savedCamera?.center&&Number.isFinite(Number(savedCamera.zoom))){
+            map.jumpTo({center:savedCamera.center,zoom:Number(savedCamera.zoom)||0,bearing:Number(savedCamera.bearing)||0,pitch:Number(savedCamera.pitch)||0});
+        }
+    }
+    maybeHideProjectLoading();
+
+    try {
+        const response=await geoPromise;
+        if(!response.ok) throw new Error(`GeoJSON HTTP ${response.status}`);
+        geojson=await response.json();
+        if(!geojson || geojson.type!=="FeatureCollection" || !Array.isArray(geojson.features)) throw new Error("Resposta GeoJSON inválida");
+        geoReady=true;
+        if(map.loaded()) { addDataLayers(); map.resize(); }
+    } catch(e){ console.error("[GeoDesk] Falha ao carregar GeoJSON:",e); geoReady=true; }
     // Migração única da versão anterior, que guardava desenhos/Geo apenas no navegador.
     if(cfg.public){
         try{ const local=JSON.parse(localStorage.getItem(`geodesk-public-view-${cfg.projectId}`)||"null"); if(local){ basemapVisible=local.basemap_visible!==false; (local.geo||{}); cfg.layers.forEach(l=>{ if(Object.prototype.hasOwnProperty.call(local.geo||{},String(l.id))) l.visible=Boolean(local.geo[String(l.id)]); }); drawings.forEach(d=>{ if(Object.prototype.hasOwnProperty.call(local.drawings||{},String(d.id))) d.visible=Boolean(local.drawings[String(d.id)]); }); } }catch{}
@@ -480,7 +501,7 @@ async function initMapEditor() {
 
     map.on("error",event=>{const msg=event?.error?.message||"";console.error("Mapbox error",event);if(/token|access token|unauthorized|forbidden|401|403/i.test(msg))setLoading("O Mapbox recusou o token. Verifique MAPBOX_TOKEN no .env.");});
     window.WEBGIS_MAP_INSTANCE=map;
-    map.on("load",()=>{mapReady=true;addDataLayers();map.resize();applyBasemapVisibility();if(savedCamera?.center&&Number.isFinite(Number(savedCamera.zoom))){map.jumpTo({center:savedCamera.center,zoom:Number(savedCamera.zoom)||0,bearing:Number(savedCamera.bearing)||0,pitch:Number(savedCamera.pitch)||0});}else if(!cfg.public&&geojson.features?.length)fitToGeoJSON(map,geojson);maybeHideProjectLoading();});
+    map.on("load",()=>{mapReady=true;syncDrawingViewport();addDataLayers();map.resize();applyBasemapVisibility();if(savedCamera?.center&&Number.isFinite(Number(savedCamera.zoom))){map.jumpTo({center:savedCamera.center,zoom:Number(savedCamera.zoom)||0,bearing:Number(savedCamera.bearing)||0,pitch:Number(savedCamera.pitch)||0});}else if(!cfg.public&&geojson.features?.length)fitToGeoJSON(map,geojson);maybeHideProjectLoading();});
     map.on("style.load",()=>{
         restoreCustomLayersAfterStyle(styleSwitchToken);
         maybeHideProjectLoading();
@@ -543,7 +564,7 @@ async function initMapEditor() {
             if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
             if(token!==styleSwitchToken)return;
             if(!map.isStyleLoaded())continue;
-            try{addDataLayers();map.resize();applyBasemapVisibility();renderDrawings();renderGeoDraw();return;}
+            try{syncDrawingViewport();addDataLayers();map.resize();applyBasemapVisibility();renderDrawings();renderGeoDraw();return;}
             catch(error){console.warn("[GeoDesk] Falha ao restaurar camadas após troca de estilo",error);}
         }
     }
@@ -590,7 +611,7 @@ async function initMapEditor() {
             if(cfg.public || editorMode!=="geo" || currentTool!=="geo-line" || event.originalEvent.button!==0)return;
             if(!selected.layerId){showHint("Selecione uma camada Geo antes de inserir.");return;}
             const p=[event.lngLat.lng,event.lngLat.lat];
-            if(!geoCurveDraft){geoCurveDraft={start:p,end:null,control:null};map.dragPan.disable();showHint("Linha · clique no ponto final e arraste para definir a curva");event.preventDefault();return;}
+            if(!geoCurveDraft){geoCurveDraft={start:p,end:null,control:null};if(!touchDevice)map.dragPan.disable();showHint("Linha · clique no ponto final e arraste para definir a curva");event.preventDefault();return;}
             if(!geoCurveDraft.end){geoCurveDraft.end=p;geoCurveDraft.control=p;showHint("Arraste para definir a curvatura e solte");event.preventDefault();}
         });
         map.on("mousemove",event=>{
@@ -670,6 +691,8 @@ async function initMapEditor() {
         const app=document.querySelector(".editor-app");app?.classList.toggle("mode-drawing",editorMode==="drawing");app?.classList.toggle("mode-geo",editorMode==="geo");
         document.querySelectorAll("[data-editor-mode]").forEach(btn=>{const active=btn.dataset.editorMode===editorMode;btn.classList.toggle("active",active);btn.setAttribute("aria-selected",String(active));});
         if(resetTool){clearSelection();setTool("select");}else updateToolVisibility();
+        if(touchDevice) map.dragPan.enable();
+        else if(editorMode==="geo" && currentTool==="select") map.dragPan.disable();
         renderDrawings();
     }
     function updateToolVisibility(){
@@ -685,7 +708,7 @@ async function initMapEditor() {
         currentTool=tool; if(tool!=="select")endVertexEdit();
         document.querySelectorAll("[data-editor-mode]").forEach(btn=>{const active=btn.dataset.editorMode===editorMode;btn.classList.toggle("active",active);btn.setAttribute("aria-selected",String(active));});
         if(tool.startsWith("geo-")||tool==="measure")map.doubleClickZoom.disable();else map.doubleClickZoom.enable();
-        if(tool.startsWith("geo-")){geoDrawPoints=[];geoDrawCursor=null;geoCurveDraft=null;if(tool!=="geo-line")map.dragPan.enable();}
+        if(tool.startsWith("geo-")){geoDrawPoints=[];geoDrawCursor=null;geoCurveDraft=null;if(touchDevice||tool!=="geo-line")map.dragPan.enable();else map.dragPan.disable();}
         if(tool!=="measure" && measurePoints.length)clearMeasure();
         document.querySelectorAll("[data-tool]").forEach(btn=>btn.classList.toggle("active",btn.dataset.tool===tool));
         if(overlay){overlay.classList.toggle("is-drawing",!["select","text","image","measure"].includes(tool) && !tool.startsWith("geo-"));overlay.classList.toggle("selection-mode",editorMode==="drawing"&&tool==="select");}
@@ -758,7 +781,7 @@ async function initMapEditor() {
             const feature={type:"Feature",properties:{},geometry:{type:"LineString",coordinates:coords}};
             const response=await fetch(`/api/projects/${cfg.projectId}/layers/${layerId}/features`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(feature)});
             if(!response.ok)throw new Error();const data=await response.json();if(data.feature){geojson.features.push(data.feature);trackGeoAction(data.feature.id);}
-            geoCurveDraft=null;map.dragPan.disable();addDataLayers();renderGeoDraw();if(data.feature)selectGeoFeature(data.feature);showHint("Linha geográfica criada · clique para criar outra");
+            geoCurveDraft=null;if(!touchDevice)map.dragPan.disable();addDataLayers();renderGeoDraw();if(data.feature)selectGeoFeature(data.feature);showHint("Linha geográfica criada · clique para criar outra");
         }catch(error){console.error("[GeoDesk] Falha ao criar linha curva",error);showHint("Não foi possível salvar a linha curva.");}
     }
 
@@ -897,7 +920,7 @@ async function initMapEditor() {
     }
     function renderSmartGuides(){
         if(!overlay||!smartGuides.length)return;const ns="http://www.w3.org/2000/svg";
-        smartGuides.forEach(g=>{const line=document.createElementNS(ns,"line");if(g.axis==="x"){line.setAttribute("x1",g.value);line.setAttribute("x2",g.value);line.setAttribute("y1",0);line.setAttribute("y2",overlay.clientHeight);}else{line.setAttribute("x1",0);line.setAttribute("x2",overlay.clientWidth);line.setAttribute("y1",g.value);line.setAttribute("y2",g.value);}line.classList.add("smart-guide");overlay.appendChild(line);});
+        smartGuides.forEach(g=>{const line=document.createElementNS(ns,"line");if(g.axis==="x"){line.setAttribute("x1",g.value);line.setAttribute("x2",g.value);line.setAttribute("y1",0);line.setAttribute("y2",drawingSourceHeight||overlay.clientHeight);}else{line.setAttribute("x1",0);line.setAttribute("x2",drawingSourceWidth||overlay.clientWidth);line.setAttribute("y1",g.value);line.setAttribute("y2",g.value);}line.classList.add("smart-guide");overlay.appendChild(line);});
     }
     function onDrawingTransformMove(e){
         if(!drawingTransform)return;const p=pointerPosition(e,overlay),rawDx=p.x-drawingTransform.start.x,rawDy=p.y-drawingTransform.start.y;let dx=rawDx,dy=rawDy;smartGuides=[];
@@ -1122,6 +1145,14 @@ async function initMapEditor() {
 
     function setupLayers(){
         document.querySelectorAll("[data-collapse-section]").forEach(btn=>btn.addEventListener("click",()=>btn.closest(".layer-section")?.classList.toggle("collapsed")));
+        document.querySelectorAll("[data-collapse-layers]").forEach(btn=>btn.addEventListener("click",event=>{
+            event.preventDefault(); event.stopPropagation();
+            const panel=btn.closest(".editor-layers"); if(!panel)return;
+            const collapsed=panel.classList.toggle("layers-collapsed");
+            btn.setAttribute("aria-expanded",String(!collapsed));
+            btn.setAttribute("aria-label",collapsed?"Expandir painel de camadas":"Minimizar painel de camadas");
+            btn.textContent=collapsed?"›":"‹";
+        }));
         document.querySelectorAll(".layer-row[data-layer-id]").forEach(row=>bindLayerRow(row));
         setupLayerDnD(document.querySelectorAll(".section-content"));
         document.querySelectorAll("[data-new-layer='drawing']").forEach(btn=>btn.addEventListener("click",()=>{if(!cfg.public)setEditorMode("drawing",true);}));
@@ -1514,7 +1545,20 @@ async function initMapEditor() {
     }
     function showAttributeTable(data){const modal=document.getElementById("attribute-table-modal"),body=document.getElementById("attribute-table-body"),title=document.getElementById("attribute-table-title");if(!modal||!body)return;const features=data?.features||[];const keys=[...new Set(features.flatMap(f=>Object.keys(f.properties||{}).filter(k=>k!=="_layer_id")))];title.textContent=`Tabela de atributos · ${features.length} feição${features.length===1?"":"s"}`;body.innerHTML="";const table=document.createElement("table");table.className="attribute-table";const thead=document.createElement("thead"),tr=document.createElement("tr");["#",...keys].forEach(k=>{const th=document.createElement("th");th.textContent=k;tr.appendChild(th);});thead.appendChild(tr);table.appendChild(thead);const tbody=document.createElement("tbody");features.forEach((f,i)=>{const row=document.createElement("tr"), first=document.createElement("td");first.textContent=i+1;row.appendChild(first);keys.forEach(k=>{const td=document.createElement("td");const value=f.properties?.[k];td.textContent=typeof value==="object"?JSON.stringify(value):String(value??"");row.appendChild(td);});tbody.appendChild(row);});table.appendChild(tbody);body.appendChild(table);modal.hidden=false;document.body.classList.add("modal-open");}
 
-    function pointerPosition(event,element){const r=element.getBoundingClientRect();return{x:Math.max(0,Math.min(r.width,event.clientX-r.left)),y:Math.max(0,Math.min(r.height,event.clientY-r.top))};}
+    function syncDrawingViewport(){
+        if(!overlay)return;
+        const width=Math.max(1,Number(canvasViewport?.width)||mapEl.clientWidth||window.innerWidth||1);
+        const height=Math.max(1,Number(canvasViewport?.height)||mapEl.clientHeight||window.innerHeight||1);
+        drawingSourceWidth=width; drawingSourceHeight=height;
+        overlay.setAttribute("viewBox",`0 0 ${width} ${height}`);
+        overlay.setAttribute("preserveAspectRatio","none");
+    }
+    function pointerPosition(event,element){
+        const r=element.getBoundingClientRect();
+        const sx=drawingSourceWidth>0 ? drawingSourceWidth/Math.max(1,r.width) : 1;
+        const sy=drawingSourceHeight>0 ? drawingSourceHeight/Math.max(1,r.height) : 1;
+        return{x:Math.max(0,Math.min(drawingSourceWidth||r.width,(event.clientX-r.left)*sx)),y:Math.max(0,Math.min(drawingSourceHeight||r.height,(event.clientY-r.top)*sy))};
+    }
     function renderDrawingStylePanel(){
         if(cfg.public)return;
         let panel=document.getElementById("drawing-style-panel");
@@ -1585,7 +1629,7 @@ async function initMapEditor() {
     }
     function saveDrawingsStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
     function loadDrawingsLocal(){return[];}
-    window.addEventListener("resize",()=>{map.resize();renderDrawings();renderVertexHandles();});
+    window.addEventListener("resize",()=>{map.resize();syncDrawingViewport();renderDrawings();renderVertexHandles();});
 }
 
 function loadDrawings(key){try{return JSON.parse(localStorage.getItem(key)||"[]");}catch{return[];}}
