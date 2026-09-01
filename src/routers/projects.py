@@ -234,45 +234,6 @@ async def open_project(request: Request, project_id: UUID, db: AsyncSession = De
     })
 
 
-@router.get("/api/dashboard/previews")
-async def dashboard_previews_api(request: Request, db: AsyncSession = Depends(get_db)):
-    """Retorna todas as prévias do dashboard em uma única consulta, evitando N requisições por projeto."""
-    if not request.session.get("user_id"):
-        raise HTTPException(status_code=401)
-    user_id=current_user_id(request)
-    projects=list(await list_projects(db,user_id))
-    if not projects:
-        return JSONResponse({"projects":{}}, headers={"Cache-Control":"private, max-age=20"})
-    project_ids=[str(p.id) for p in projects]
-    result=await db.execute(text("""
-        WITH ranked AS (
-            SELECT f.id, f.properties, f.geometry, l.project_id,
-                   ROW_NUMBER() OVER (PARTITION BY l.project_id ORDER BY f.created_at ASC) AS rn
-            FROM features f
-            JOIN layers l ON l.id=f.layer_id
-            WHERE l.project_id = ANY(:project_ids) AND f.deleted_at IS NULL
-        )
-        SELECT id, properties, project_id,
-               ST_AsGeoJSON(CASE
-                   WHEN GeometryType(geometry) IN ('POLYGON','MULTIPOLYGON')
-                       THEN ST_SimplifyPreserveTopology(geometry, 0.00005)
-                   ELSE ST_Simplify(geometry, 0.00005)
-               END) AS geometry_json
-        FROM ranked WHERE rn <= 120
-    """), {"project_ids":project_ids})
-    geo={pid:[] for pid in project_ids}
-    for row in result:
-        geometry=json.loads(row.geometry_json) if isinstance(row.geometry_json,str) else row.geometry_json
-        if geometry:
-            geo[str(row.project_id)].append({"type":"Feature","id":str(row.id),"geometry":geometry,"properties":row.properties or {}})
-    settings_result=await db.execute(select(ProjectSetting).where(ProjectSetting.project_id.in_(projects and [p.id for p in projects] or [])))
-    settings={str(row.project_id):dict(row.settings or {}) for row in settings_result.scalars().all()}
-    payload={}
-    for project in projects:
-        state=settings.get(str(project.id),{})
-        payload[str(project.id)]={"geojson":{"type":"FeatureCollection","features":geo.get(str(project.id),[])},"drawings":(state.get("drawings") or [])[:200],"camera":state.get("camera"),"viewport":state.get("viewport")}
-    return JSONResponse({"projects":payload}, headers={"Cache-Control":"private, max-age=20"})
-
 @router.get("/api/projects/{project_id}/preview")
 async def project_preview_api(request: Request, project_id: UUID, db: AsyncSession = Depends(get_db)):
     """Prévia leve para o dashboard: não envia o GeoJSON completo das camadas grandes."""
