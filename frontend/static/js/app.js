@@ -267,7 +267,8 @@ async function initMapEditor() {
     let drawingSourceWidth=0, drawingSourceHeight=0;
     // Token de renderização deve existir antes de qualquer chamada a renderDrawings().
     let drawingRenderToken=0;
-    const maybeHideProjectLoading=()=>{ if(dataReady && geoReady && mapReady && drawingsRendered) hideLoading(); };
+    // Não bloqueie a tela inteira pela lista/SVG de desenhos.
+     const maybeHideProjectLoading=()=>{ if(dataReady && geoReady && mapReady) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
     // Estado do canvas é pequeno e libera a tela rapidamente. O GeoJSON pode ser grande,
@@ -284,6 +285,7 @@ async function initMapEditor() {
             basemapVisible=state.basemap_visible!==false;
             savedCamera=state.camera||null;
             canvasViewport=state.viewport||null;
+            updateDrawingLayers();
         } else console.error(`[GeoDesk] Falha ao carregar desenhos: HTTP ${response.status}`);
     } catch(e){ console.error("[GeoDesk] Falha ao carregar estado do canvas:",e); }
     dataReady=true;
@@ -556,7 +558,7 @@ async function initMapEditor() {
         const c=map.getCenter(); const payload={camera:{center:[c.lng,c.lat],zoom:map.getZoom(),bearing:map.getBearing(),pitch:map.getPitch()},viewport:{width:mapEl.clientWidth,height:mapEl.clientHeight},basemap_visible:basemapVisible};
         try{fetch(`/api/projects/${cfg.projectId}/canvas`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),keepalive:true});}catch{}
     });
-    map.addControl(new mapboxgl.NavigationControl({showCompass:true}),"bottom-right");
+    map.addControl(new mapboxgl.NavigationControl({showCompass:true}),"top-right");
     function applyBasemapVisibility(){
         document.querySelectorAll("[data-layer-toggle-base]").forEach(btn=>{btn.textContent=basemapVisible?"◉":"○";btn.classList.toggle("is-visible",basemapVisible);btn.setAttribute("aria-pressed",String(basemapVisible));});
         if(!map.isStyleLoaded())return;
@@ -1451,7 +1453,38 @@ async function initMapEditor() {
     function updateLayerRows(){document.querySelectorAll("[data-section='geo'] .layer-row[data-layer-id]").forEach(row=>{const layer=cfg.layers.find(l=>String(l.id)===row.dataset.layerId);if(layer){const btn=row.querySelector(".layer-visibility");btn.textContent=layer.visible===false?"○":"◉";btn.classList.toggle("is-visible",layer.visible!==false);}});}
     function drawingLayerLabel(d,index){ return d.name || (d.type==="text" ? d.text : null) || toolLabel(d.type) || `Desenho ${index+1}`; }
     function drawingSymbolClass(d){ return `drawing-symbol drawing-symbol-${d.type}`; }
-    function updateDrawingLayers(){const list=document.getElementById("drawing-layers-list"),count=document.getElementById("drawing-layer-count"),empty=document.getElementById("drawing-empty");if(!list)return;if(count)count.textContent=String(drawings.length);if(empty)empty.style.display=drawings.length?"none":"block";list.querySelectorAll(".drawing-layer-row").forEach(el=>el.remove());drawings.slice().reverse().forEach((d,index)=>{const row=document.createElement("div");row.className="layer-row drawing-layer-row";row.dataset.drawingId=d.id;row.dataset.layerKind="drawing";row.innerHTML=`<span class="layer-grip">⠿</span><button class="layer-visibility ${d.visible===false?"":"is-visible"}" type="button">${d.visible===false?"○":"◉"}</button><span class="layer-symbol ${drawingSymbolClass(d)}"></span><span class="layer-name"></span>${cfg.public?"":"<button class=\"layer-more\" type=\"button\" title=\"Opções\">⋯</button>"}`;row.querySelector(".layer-name").textContent=displayLayerName(drawingLayerLabel(d,index));list.appendChild(row);bindLayerRow(row);row.querySelector(".layer-visibility").addEventListener("click",e=>{e.stopPropagation();d.visible=d.visible===false;saveDrawings();savePublicViewState();renderDrawings();updateDrawingLayers();});});}
+    function updateDrawingLayers(){
+         const list=document.getElementById("drawing-layers-list"),count=document.getElementById("drawing-layer-count"),empty=document.getElementById("drawing-empty");
+         if(!list)return;
+         const token=++drawingLayersRenderToken;
+         if(count)count.textContent=String(drawings.length);
+         if(empty)empty.style.display=drawings.length?"none":"block";
+         list.querySelectorAll(".drawing-layer-row").forEach(el=>el.remove());
+         if(!drawings.length)return;
+         const items=drawings.slice().reverse(),batchSize=80; let index=0;
+         const appendBatch=()=>{
+             if(token!==drawingLayersRenderToken)return;
+             const fragment=document.createDocumentFragment(),end=Math.min(index+batchSize,items.length);
+             for(;index<end;index++){
+                 const d=items[index],row=document.createElement("div");
+                 row.className="layer-row drawing-layer-row";row.dataset.drawingId=d.id;row.dataset.layerKind="drawing";
+                 row.innerHTML=`<span class="layer-grip">⠿</span><button class="layer-visibility ${d.visible===false?"":"is-visible"}" type="button">${d.visible===false?"○":"◉"}</button><span class="layer-symbol ${drawingSymbolClass(d)}"></span><span class="layer-name"></span>${cfg.public ? "" : "<button class=\"layer-more\" type=\"button\" title=\"Opções\">⋯</button>"}`;
+                 row.querySelector(".layer-name").textContent=displayLayerName(drawingLayerLabel(d,index));
+                 fragment.appendChild(row);
+             }
+             list.appendChild(fragment);
+             list.querySelectorAll(".drawing-layer-row").forEach(row=>{
+                 if(row.dataset.boundDrawingLayer==="1")return;
+                 row.dataset.boundDrawingLayer="1";bindLayerRow(row);
+                 row.querySelector(".layer-visibility")?.addEventListener("click",e=>{
+                     e.stopPropagation();const d=drawings.find(x=>x.id===row.dataset.drawingId);if(!d)return;
+                     d.visible=d.visible===false;saveDrawings();savePublicViewState();renderDrawings();updateDrawingLayers();
+                 });
+             });
+             if(index<items.length)requestAnimationFrame(appendBatch);
+         };
+         requestAnimationFrame(appendBatch);
+     }
 
     function setupContextMenu(){
         const menu=document.createElement("div");
@@ -1590,7 +1623,7 @@ async function initMapEditor() {
         const height=Math.max(1,Number(canvasViewport?.height)||mapEl.clientHeight||window.innerHeight||1);
         drawingSourceWidth=width; drawingSourceHeight=height;
         overlay.setAttribute("viewBox",`0 0 ${width} ${height}`);
-        overlay.setAttribute("preserveAspectRatio","xMinYMin meet");
+        overlay.setAttribute("preserveAspectRatio","xMidYMid meet");
     }
     function pointerPosition(event,element){
         const r=element.getBoundingClientRect();

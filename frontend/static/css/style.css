@@ -856,3 +856,16 @@ body.right-pressed *{cursor:grabbing !important;}
   .editor-app .mapboxgl-ctrl-top-left{left:auto;right:10px;top:94px;}
   .drawing-loading{top:140px;max-width:calc(100vw - 24px);white-space:nowrap;}
 }
+
+
+/* v14 — controles do mapa no topo direito, logo abaixo de Mapa/Satélite. */
+.editor-app .map-style-switcher{left:auto!important;right:14px!important;top:58px!important;bottom:auto!important;z-index:25;}
+.editor-app .mapboxgl-ctrl-top-right{display:block!important;right:14px!important;top:96px!important;z-index:24;}
+.editor-app .mapboxgl-ctrl-top-right .mapboxgl-ctrl{margin:0!important;}
+.editor-app .mapboxgl-ctrl-top-left,.editor-app .mapboxgl-ctrl-bottom-right{display:none!important;}
+@media(max-width:760px){
+  .editor-app .map-style-switcher{right:10px!important;top:50px!important;}
+  .editor-app .mapboxgl-ctrl-top-right{right:10px!important;top:88px!important;}
+}
+/* SVG mantém a proporção dos objetos e centraliza o conjunto ao adaptar uma tela com outra proporção. */
+.drawing-overlay{preserveAspectRatio:xMidYMid meet;}
