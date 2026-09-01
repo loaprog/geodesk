@@ -836,3 +836,23 @@ body.right-pressed *{cursor:grabbing !important;}
 
 /* O SVG usa a mesma escala em X/Y para que retângulos, imagens e textos não sejam deformados em telas menores. */
 .drawing-overlay{preserveAspectRatio:xMinYMin meet;}
+
+
+/* v13 — controles no topo direito e ferramentas centralizadas embaixo */
+.editor-project-actions{left:auto;right:14px;top:14px;}
+.editor-topbar,.public-editor .editor-topbar.public-toolbar{left:50%;right:auto;top:auto;bottom:14px;transform:translateX(-50%);}
+.map-style-switcher{left:auto;right:14px;top:58px;bottom:auto;}
+.editor-app .mapboxgl-ctrl-top-left{left:auto;right:14px;top:99px;bottom:auto;z-index:18;}
+.editor-app .mapboxgl-ctrl-top-right{display:none;}
+.editor-app .mapboxgl-ctrl-bottom-right{display:none;}
+
+@media(max-width:760px){
+  .editor-project-actions{left:auto;right:10px;top:10px;gap:5px;}
+  .editor-project-actions .editor-action{padding:0 7px;font-size:9px;}
+  .editor-project-actions .editor-avatar{width:30px;height:30px;}
+  .editor-topbar,.public-editor .editor-topbar.public-toolbar{left:50%;right:auto;top:auto;bottom:10px;transform:translateX(-50%);max-width:calc(100vw - 20px);}
+  .editor-toolbar{max-width:calc(100vw - 20px);overflow-x:auto;}
+  .map-style-switcher{left:auto;right:10px;top:50px;bottom:auto;}
+  .editor-app .mapboxgl-ctrl-top-left{left:auto;right:10px;top:94px;}
+  .drawing-loading{top:140px;max-width:calc(100vw - 24px);white-space:nowrap;}
+}

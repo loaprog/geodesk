@@ -263,11 +263,11 @@ async function initMapEditor() {
     cfg.layers=(cfg.layers||[]).map((l,i)=>typeof l === "string" ? {id:l,name:`Camada ${i+1}`,visible:true,z_index:i} : l);
     let drawings=[], geoDrawPoints=[], geoDrawCursor=null, geoCurveDraft=null, currentTool="select", editorMode="geo", drawing=null, drawingMarquee=null, selected={type:null,id:null,layerId:null}, selectedDrawingIds=[], drawingClipboard=null, undoStack=[], redoStack=[], editingFeature=null, vertexHandles=[], selectedVertex=null, basemapVisible=true, savedCamera=null, canvasViewport=null, smartGuides=[];
     let measureMode="distance", measureUnit="m", measurePoints=[], measureFinished=false;
-    let dataReady=false, mapReady=false, geoReady=false;
+    let dataReady=false, mapReady=false, geoReady=false, drawingsRendered=false;
     let drawingSourceWidth=0, drawingSourceHeight=0;
     // Token de renderização deve existir antes de qualquer chamada a renderDrawings().
     let drawingRenderToken=0;
-    const maybeHideProjectLoading=()=>{ if(dataReady && mapReady) hideLoading(); };
+    const maybeHideProjectLoading=()=>{ if(dataReady && geoReady && mapReady && drawingsRendered) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
     // Estado do canvas é pequeno e libera a tela rapidamente. O GeoJSON pode ser grande,
@@ -887,8 +887,14 @@ async function initMapEditor() {
         overlay.innerHTML="";
         const visible=drawings.filter(d=>d.visible!==false);
         const loading=document.getElementById("drawing-loading");
-        if(loading){loading.hidden=!visible.length; const text=loading.querySelector(".drawing-loading-text"); if(text)text.textContent=visible.length?`Carregando desenhos... ${visible.length}`:"";}
-        const batchSize=60; let index=0;
+        const isInitialRender=!drawingsRendered;
+        if(isInitialRender){
+            drawingsRendered=false;
+            if(loading){loading.hidden=false; const text=loading.querySelector(".drawing-loading-text"); if(text)text.textContent=visible.length?`Carregando desenhos... ${visible.length}`:"Preparando desenhos...";}
+        }
+        // Lotes maiores reduzem drasticamente o tempo total: o canvas continua responsivo,
+        // mas não esperamos um requestAnimationFrame para cada pequeno grupo de objetos.
+        const batchSize=240; let index=0;
         const paintBatch=()=>{
             if(token!==drawingRenderToken)return;
             const fragment=document.createDocumentFragment();
@@ -899,9 +905,17 @@ async function initMapEditor() {
             }else{
                 if(drawing){const draft=makeDrawing(drawing);const el=draft&&svgElement(draft);if(el){el.classList.add("draft-object");overlay.appendChild(el);}}
                 renderSmartGuides(); renderDrawingHandles(); renderDrawingMarquee();
+                drawingsRendered=true;
                 if(loading)loading.hidden=true;
+                maybeHideProjectLoading();
             }
         };
+        if(!visible.length){
+            drawingsRendered=true;
+            if(loading)loading.hidden=true;
+            maybeHideProjectLoading();
+            return;
+        }
         requestAnimationFrame(paintBatch);
     }
     function renderDrawingHandles(){
