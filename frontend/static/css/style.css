@@ -864,7 +864,7 @@ body.right-pressed *{cursor:grabbing !important;}
 .editor-app .mapboxgl-ctrl-top-right .mapboxgl-ctrl{margin:0!important;}
 .editor-app .mapboxgl-ctrl-top-left,.editor-app .mapboxgl-ctrl-bottom-right{display:none!important;}
 @media(max-width:760px){
-  .editor-app .map-style-switcher{right:10px!important;top:50px!important;}
+  .editor-app .map-style-switcher{right:10px!important;}
   .editor-app .mapboxgl-ctrl-top-right{right:10px!important;top:88px!important;}
 }
 /* SVG mantém a proporção dos objetos e centraliza o conjunto ao adaptar uma tela com outra proporção. */
