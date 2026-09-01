@@ -246,7 +246,7 @@ body.modal-open { overflow: hidden; }
 .tool-button.active { background: #eaf7ed; color: #28773a; box-shadow: inset 0 0 0 1px rgba(63,174,88,.14); }
 .tool-icon { min-width: 17px; font-size: 17px; line-height: 1; text-align: center; }
 .tool-divider { width: 1px; height: 23px; margin: 0 3px; background: #e7e7e7; }
-.editor-layers { position: absolute; top: 14px; left: 14px; bottom: 14px; width: 278px; z-index: 30; display: flex; flex-direction: column; overflow: hidden; background: rgba(255,255,255,.97); border: 1px solid rgba(0,0,0,.09); border-radius: 11px; box-shadow: 0 10px 35px rgba(0,0,0,.11); backdrop-filter: blur(16px); }
+.editor-layers { position: absolute; top: 14px; left: 14px; bottom: auto; width: 278px; z-index: 30; display: flex; flex-direction: column; overflow: hidden; background: rgba(255,255,255,.97); border: 1px solid rgba(0,0,0,.09); border-radius: 11px; box-shadow: 0 10px 35px rgba(0,0,0,.11); backdrop-filter: blur(16px); }
 .layers-top { min-height: 58px; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-bottom: 1px solid #ededed; }
 .back-button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: #666; font-size: 18px; }
 .back-button:hover { background: #f2f2f2; }
