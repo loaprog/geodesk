@@ -285,6 +285,9 @@ async function initMapEditor() {
         } else console.error(`[GeoDesk] Falha ao carregar desenhos: HTTP ${response.status}`);
     } catch(e){ console.error("[GeoDesk] Falha ao carregar estado do canvas:",e); }
     dataReady=true;
+    // O mapa pode terminar de carregar enquanto o estado do projeto é buscado.
+    // Nesse caso o evento `load` já aconteceu e não pode ser capturado depois.
+    if(map.loaded()) mapReady=true;
     syncDrawingViewport();
     if(map.loaded()) {
         addDataLayers(); map.resize(); applyBasemapVisibility();
