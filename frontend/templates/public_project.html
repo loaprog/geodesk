@@ -6,6 +6,7 @@
 <div class="editor-app public-editor">
     <div id="map" class="mapbox-map"></div>
     <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>{{ project.name }}</strong><small>carregando projeto...</small></div>
+    <div id="drawing-loading" class="drawing-loading" role="status" aria-live="polite" hidden><span class="geo-loading-spinner"></span><span class="drawing-loading-text">Carregando desenhos...</span></div>
 
     <aside class="editor-layers" aria-label="Camadas">
         <div class="layers-top">
@@ -41,7 +42,7 @@
     <div class="map-style-switcher"><button type="button" data-map-style="streets">Mapa</button><button type="button" data-map-style="satellite" class="active">Satélite</button></div>
     <div class="editor-hint" id="editor-hint">Selecione uma ferramenta para começar</div>
     <div class="measure-panel" id="measure-panel" hidden>
-        <div class="measure-panel-head"><strong>Régua</strong><button type="button" id="measure-close" aria-label="Fechar">×</button></div>
+        <div class="measure-panel-head"><div class="measure-drag-title">Régua</div><div class="measure-panel-head-actions"><button type="button" id="measure-minimize" title="Minimizar">−</button><button type="button" id="measure-close" aria-label="Fechar">×</button></div></div>
         <div class="measure-mode-row"><button type="button" class="measure-mode active" data-measure-mode="distance">Distância</button><button type="button" class="measure-mode" data-measure-mode="area">Área</button></div>
         <div class="measure-unit-row"><span>Unidade</span><select id="measure-unit"><option value="m">m</option><option value="km">km</option><option value="m2">m²</option><option value="ha">ha</option></select></div>
         <div class="measure-result" id="measure-result">Clique no mapa para marcar o início da distância.</div>

@@ -7,6 +7,7 @@
     <div id="map" class="mapbox-map"></div>
     <div class="map-loading" id="map-loading" role="status" aria-live="polite"><div class="figma-loader"><span></span><span></span><span></span></div><strong>{{ project.name }}</strong><small>carregando projeto...</small></div>
     <div id="geo-loading" class="geo-loading" role="status" aria-live="polite" hidden><span class="geo-loading-spinner"></span><span class="geo-loading-text">Carregando camada Geo...</span></div>
+    <div id="drawing-loading" class="drawing-loading" role="status" aria-live="polite" hidden><span class="geo-loading-spinner"></span><span class="drawing-loading-text">Carregando desenhos...</span></div>
 
     <aside class="editor-layers" aria-label="Camadas">
         <div class="layers-top">
@@ -89,8 +90,7 @@
 
     <div class="measure-panel" id="measure-panel" hidden>
         <div class="measure-panel-head">
-            <strong>Régua</strong>
-            <button type="button" id="measure-close" title="Fechar">×</button>
+            <div class="measure-drag-title">Régua</div><div class="measure-panel-head-actions"><button type="button" id="measure-minimize" title="Minimizar">−</button><button type="button" id="measure-close" title="Fechar">×</button></div>
         </div>
         <div class="measure-mode-row">
             <button type="button" class="measure-mode active" data-measure-mode="distance">Distância</button>

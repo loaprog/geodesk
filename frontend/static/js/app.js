@@ -265,6 +265,8 @@ async function initMapEditor() {
     let measureMode="distance", measureUnit="m", measurePoints=[], measureFinished=false;
     let dataReady=false, mapReady=false, geoReady=false;
     let drawingSourceWidth=0, drawingSourceHeight=0;
+    // Token de renderização deve existir antes de qualquer chamada a renderDrawings().
+    let drawingRenderToken=0;
     const maybeHideProjectLoading=()=>{ if(dataReady && mapReady) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
@@ -285,9 +287,6 @@ async function initMapEditor() {
         } else console.error(`[GeoDesk] Falha ao carregar desenhos: HTTP ${response.status}`);
     } catch(e){ console.error("[GeoDesk] Falha ao carregar estado do canvas:",e); }
     dataReady=true;
-    // O mapa pode terminar de carregar enquanto o estado do projeto é buscado.
-    // Nesse caso o evento `load` já aconteceu e não pode ser capturado depois.
-    if(map.loaded()) mapReady=true;
     syncDrawingViewport();
     if(map.loaded()) {
         addDataLayers(); map.resize(); applyBasemapVisibility();
@@ -422,6 +421,7 @@ async function initMapEditor() {
         if(!map.getLayer("measure-fill"))map.addLayer({id:"measure-fill",type:"fill",source:"measure-source",filter:["==",["geometry-type"],"Polygon"],paint:{"fill-color":"#3fae58","fill-opacity":0.12}});
         if(!map.getLayer("measure-line"))map.addLayer({id:"measure-line",type:"line",source:"measure-source",filter:["==",["geometry-type"],"LineString"],paint:{"line-color":"#2f8e45","line-width":2.5,"line-dasharray":[2,2]}});
         if(!map.getLayer("measure-points"))map.addLayer({id:"measure-points",type:"circle",source:"measure-source",filter:["==",["geometry-type"],"Point"],paint:{"circle-radius":4,"circle-color":"#ffffff","circle-stroke-color":"#2f8e45","circle-stroke-width":2}});
+        if(!map.getLayer("measure-labels"))map.addLayer({id:"measure-labels",type:"symbol",source:"measure-source",filter:["==",["get","measure_label"],true],layout:{"text-field":["get","label"],"text-size":11,"text-font":["Open Sans Semibold","Arial Unicode MS Bold"],"text-anchor":"bottom","text-offset":[0,-0.7],"text-allow-overlap":true},paint:{"text-color":"#245d30","text-halo-color":"#ffffff","text-halo-width":1.5}});
     }
     function measureDistanceMeters(points){
         let total=0;
@@ -465,6 +465,12 @@ async function initMapEditor() {
         if(!map.loaded())return;
         ensureMeasureLayers();
         const features=measurePoints.map(coord=>({type:"Feature",geometry:{type:"Point",coordinates:coord},properties:{}}));
+        const isDistance=measureMode==="distance";
+        for(let i=1;i<measurePoints.length;i++){
+            const a=measurePoints[i-1],b=measurePoints[i];
+            const meters=mapboxgl.LngLat.convert(a).distanceTo(mapboxgl.LngLat.convert(b));
+            features.push({type:"Feature",geometry:{type:"Point",coordinates:[(a[0]+b[0])/2,(a[1]+b[1])/2]},properties:{measure_label:isDistance,label:formatMeasure(meters,measureUnit)}});
+        }
         if(measurePoints.length>=2)features.push({type:"Feature",geometry:{type:"LineString",coordinates:measureMode==="area"&&measurePoints.length>=3?[...measurePoints,measurePoints[0]]:measurePoints},properties:{}});
         if(measureMode==="area"&&measurePoints.length>=3)features.push({type:"Feature",geometry:{type:"Polygon",coordinates:[[...measurePoints,measurePoints[0]]]},properties:{}});
         map.getSource("measure-source")?.setData({type:"FeatureCollection",features});
@@ -497,9 +503,10 @@ async function initMapEditor() {
         document.querySelectorAll("[data-measure-mode]").forEach(btn=>btn.addEventListener("click",event=>{
             event.preventDefault();event.stopPropagation();measureMode=btn.dataset.measureMode==="area"?"area":"distance";measureUnit=measureMode==="area"?"m2":"m";clearMeasure();
         }));
-        document.getElementById("measure-unit")?.addEventListener("change",event=>{measureUnit=event.target.value;updateMeasureUI();});
+        document.getElementById("measure-unit")?.addEventListener("change",event=>{measureUnit=event.target.value;updateMeasureSource();});
         document.getElementById("measure-clear")?.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();clearMeasure();});
         document.getElementById("measure-close")?.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();setTool("select");});
+        setupMeasurePanelDrag();
     }
 
     map.on("error",event=>{const msg=event?.error?.message||"";console.error("Mapbox error",event);if(/token|access token|unauthorized|forbidden|401|403/i.test(msg))setLoading("O Mapbox recusou o token. Verifique MAPBOX_TOKEN no .env.");});
@@ -875,12 +882,27 @@ async function initMapEditor() {
         return base;
     }
     function renderDrawings(){
-        if(!overlay)return;overlay.innerHTML="";
-        drawings.filter(d=>d.visible!==false).forEach(d=>{const el=svgElement(d);if(el)overlay.appendChild(el);});
-        if(drawing){const draft=makeDrawing(drawing);const el=draft&&svgElement(draft);if(el){el.classList.add("draft-object");overlay.appendChild(el);}}
-        renderSmartGuides();
-        renderDrawingHandles();
-        renderDrawingMarquee();
+        if(!overlay)return;
+        const token=++drawingRenderToken;
+        overlay.innerHTML="";
+        const visible=drawings.filter(d=>d.visible!==false);
+        const loading=document.getElementById("drawing-loading");
+        if(loading){loading.hidden=!visible.length; const text=loading.querySelector(".drawing-loading-text"); if(text)text.textContent=visible.length?`Carregando desenhos... ${visible.length}`:"";}
+        const batchSize=60; let index=0;
+        const paintBatch=()=>{
+            if(token!==drawingRenderToken)return;
+            const fragment=document.createDocumentFragment();
+            for(let end=Math.min(index+batchSize,visible.length);index<end;index++){const el=svgElement(visible[index]);if(el)fragment.appendChild(el);}
+            overlay.appendChild(fragment);
+            if(index<visible.length){
+                requestAnimationFrame(paintBatch);
+            }else{
+                if(drawing){const draft=makeDrawing(drawing);const el=draft&&svgElement(draft);if(el){el.classList.add("draft-object");overlay.appendChild(el);}}
+                renderSmartGuides(); renderDrawingHandles(); renderDrawingMarquee();
+                if(loading)loading.hidden=true;
+            }
+        };
+        requestAnimationFrame(paintBatch);
     }
     function renderDrawingHandles(){
         if(cfg.public || !overlay || editorMode!=="drawing" || !selectedDrawingIds.length) return;
@@ -1554,7 +1576,7 @@ async function initMapEditor() {
         const height=Math.max(1,Number(canvasViewport?.height)||mapEl.clientHeight||window.innerHeight||1);
         drawingSourceWidth=width; drawingSourceHeight=height;
         overlay.setAttribute("viewBox",`0 0 ${width} ${height}`);
-        overlay.setAttribute("preserveAspectRatio","none");
+        overlay.setAttribute("preserveAspectRatio","xMinYMin meet");
     }
     function pointerPosition(event,element){
         const r=element.getBoundingClientRect();
@@ -1621,6 +1643,16 @@ async function initMapEditor() {
         panel.querySelector("#drawing-stroke-color")?.closest("label")?.style.setProperty("display",isLine?"flex":"flex");
     }
     function toColor(value,fallback){const m=String(value||"").match(/^#([0-9a-f]{6})$/i);return m?value:fallback;}
+
+    function setupMeasurePanelDrag(){
+        const panel=document.getElementById("measure-panel"),head=panel?.querySelector(".measure-panel-head"),collapse=document.getElementById("measure-minimize");
+        if(!panel||!head||panel.dataset.dragReady)return; panel.dataset.dragReady="1";
+        collapse?.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();panel.classList.toggle("is-minimized");collapse.textContent=panel.classList.contains("is-minimized")?"＋":"−";});
+        let drag=null;
+        head.addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;const r=panel.getBoundingClientRect();drag={x:e.clientX-r.left,y:e.clientY-r.top};panel.classList.add("is-dragging");head.setPointerCapture?.(e.pointerId);});
+        head.addEventListener("pointermove",e=>{if(!drag)return;panel.style.left=`${Math.max(6,Math.min(window.innerWidth-panel.offsetWidth-6,e.clientX-drag.x))}px`;panel.style.top=`${Math.max(6,Math.min(window.innerHeight-panel.offsetHeight-6,e.clientY-drag.y))}px`;panel.style.bottom="auto";panel.style.transform="none";});
+        const end=()=>{drag=null;panel.classList.remove("is-dragging");}; head.addEventListener("pointerup",end);head.addEventListener("pointercancel",end);
+    }
 
     let saveCanvasTimer=null;
     function saveDrawings(){
