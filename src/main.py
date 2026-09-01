@@ -20,6 +20,10 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 
 
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"status": "ok"}
+
 @app.get("/",include_in_schema=False,)
 async def root(request: Request):
     if request.session.get("user_id"):

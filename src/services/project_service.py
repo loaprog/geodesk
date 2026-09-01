@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import Project, ProjectMember, User
+from src.models import Layer, Project, ProjectMember, ProjectSetting, User
 
 
 async def list_projects(db: AsyncSession, user_id: UUID) -> list[Project]:
@@ -79,6 +79,21 @@ async def rename_project(db: AsyncSession, project: Project, name: str) -> Proje
 
 
 async def delete_project(db: AsyncSession, project: Project) -> None:
+    # Exclusão explícita para funcionar mesmo quando o banco existente não
+    # possui todas as constraints ON DELETE CASCADE da versão atual.
+    pid = str(project.id)
+    await db.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
+    await db.execute(delete(ProjectSetting).where(ProjectSetting.project_id == project.id))
+    await db.execute(
+        text("DELETE FROM feature_versions WHERE feature_id IN (SELECT id FROM features WHERE layer_id IN (SELECT id FROM layers WHERE project_id = :pid))"),
+        {"pid": pid},
+    )
+    await db.execute(
+        text("DELETE FROM feature_properties WHERE feature_id IN (SELECT id FROM features WHERE layer_id IN (SELECT id FROM layers WHERE project_id = :pid))"),
+        {"pid": pid},
+    )
+    await db.execute(text("DELETE FROM features WHERE layer_id IN (SELECT id FROM layers WHERE project_id = :pid)"), {"pid": pid})
+    await db.execute(delete(Layer).where(Layer.project_id == project.id))
     await db.delete(project)
     await db.commit()
 

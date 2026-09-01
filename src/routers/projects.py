@@ -481,8 +481,10 @@ async def reorder_layers(request: Request, project_id: UUID, db: AsyncSession = 
         raise HTTPException(status_code=422, detail="Ordem de camadas inválida") from exc
     result = await db.execute(select(Layer).where(Layer.project_id == project.id))
     layers = {layer.id: layer for layer in result.scalars().all()}
-    if set(parsed) != set(layers):
-        raise HTTPException(status_code=422, detail="A lista deve conter todas as camadas do projeto")
+    # O frontend pode ter uma linha desatualizada durante uma atualização.
+    # Preserve a ordem recebida e acrescente as camadas que ficaram fora.
+    missing = [layer_id for layer_id in layers if layer_id not in set(parsed)]
+    parsed.extend(sorted(missing, key=lambda lid: (layers[lid].z_index, str(lid))))
     for index, layer_id in enumerate(parsed):
         layers[layer_id].z_index = len(parsed) - index
     await db.commit()
@@ -499,7 +501,9 @@ async def delete_layer(request: Request, project_id: UUID, layer_id: UUID, db: A
     result = await db.execute(select(Layer).where(Layer.id == layer_id, Layer.project_id == project.id))
     layer = result.scalar_one_or_none()
     if not layer:
-        raise HTTPException(status_code=404, detail="Camada não encontrada")
+        # DELETE é idempotente: se a camada já foi removida por outra ação,
+        # o estado desejado já foi atingido.
+        return JSONResponse({"ok": True, "already_deleted": True})
     await db.delete(layer)
     await db.commit()
     return JSONResponse({"ok": True})

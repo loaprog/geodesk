@@ -267,7 +267,7 @@ async function initMapEditor() {
     let drawingSourceWidth=0, drawingSourceHeight=0;
     // Token de renderização deve existir antes de qualquer chamada a renderDrawings().
     let drawingRenderToken=0, drawingLayersRenderToken=0;
-    const maybeHideProjectLoading=()=>{ if(mapReady && dataReady && geoReady) hideLoading(); };
+    const maybeHideProjectLoading=()=>{ if(mapReady && geoReady) hideLoading(); };
     const overlay=document.getElementById("drawing-overlay");
 
     // Estado do canvas é pequeno e libera a tela rapidamente. O GeoJSON pode ser grande,
@@ -355,6 +355,7 @@ async function initMapEditor() {
     }
     function addDataLayers(){
         if(!map.isStyleLoaded())return;
+        mapReady=true;
         removeDataLayers();
         map.addSource("geodesk-data",{type:"geojson",data:geojson});
         [...cfg.layers].sort((a,b)=>(a.z_index??0)-(b.z_index??0)).forEach(l=>addGeoLayer(l,"geodesk-data"));
@@ -363,6 +364,7 @@ async function initMapEditor() {
         renderDrawings();
         renderVertexHandles();
         if(selected.type==="geo" && selected.id) setFeatureStateSafe(selected.id,{selected:true});
+        maybeHideProjectLoading();
     }
     function setLayerVisibility(layerId,visible,kind="geo"){
         const prefix=kind==="import"?`import-${layerId}`:`geodesk-${layerId}`;
