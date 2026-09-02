@@ -302,8 +302,14 @@ async function initMapEditor() {
         geojson=await response.json();
         if(!geojson || geojson.type!=="FeatureCollection" || !Array.isArray(geojson.features)) throw new Error("Resposta GeoJSON inválida");
         geoReady=true;
-        if(map.loaded()) { addDataLayers(); map.resize(); }
-    } catch(e){ console.error("[GeoDesk] Falha ao carregar GeoJSON:",e); geoReady=true; }
+        if(map.loaded()) { mapReady=true; addDataLayers(); map.resize(); applyBasemapVisibility(); }
+        maybeHideProjectLoading();
+    } catch(e){
+        console.error("[GeoDesk] Falha ao carregar GeoJSON:",e);
+        // Um erro transitório do endpoint não deve deixar o usuário preso no loading.
+        geoReady=true;
+        maybeHideProjectLoading();
+    }
     // Migração única da versão anterior, que guardava desenhos/Geo apenas no navegador.
     if(cfg.public){
         try{ const local=JSON.parse(localStorage.getItem(`geodesk-public-view-${cfg.projectId}`)||"null"); if(local){ basemapVisible=local.basemap_visible!==false; (local.geo||{}); cfg.layers.forEach(l=>{ if(Object.prototype.hasOwnProperty.call(local.geo||{},String(l.id))) l.visible=Boolean(local.geo[String(l.id)]); }); drawings.forEach(d=>{ if(Object.prototype.hasOwnProperty.call(local.drawings||{},String(d.id))) d.visible=Boolean(local.drawings[String(d.id)]); }); } }catch{}
@@ -999,7 +1005,7 @@ async function initMapEditor() {
             el.style.setProperty("font-family",d.fontFamily||"Inter","important");
             el.style.setProperty("font-weight",String(d.fontWeight||600),"important");
         }
-        else if(d.type==="image"){el=document.createElementNS(ns,"image");el.setAttribute("href",d.src||"");el.setAttribute("x",d.x);el.setAttribute("y",d.y);el.setAttribute("width",d.w);el.setAttribute("height",d.h);el.setAttribute("preserveAspectRatio","xMidYMid slice");}
+        else if(d.type==="image"){el=document.createElementNS(ns,"image");el.setAttribute("href",d.src||"");el.setAttribute("x",d.x);el.setAttribute("y",d.y);el.setAttribute("width",d.w);el.setAttribute("height",d.h);el.setAttribute("preserveAspectRatio","xMidYMid meet");}
         else return null;
         el.dataset.drawingId=d.id||"draft";el.classList.toggle("is-selected",selectedDrawingIds.includes(d.id));el.addEventListener("pointerdown",e=>{
             if(cfg.public||editorMode!=="drawing"||currentTool!=="select"||!d.id)return;e.preventDefault();e.stopPropagation();
@@ -1594,13 +1600,33 @@ async function initMapEditor() {
         const height=Math.max(1,Number(canvasViewport?.height)||mapEl.clientHeight||window.innerHeight||1);
         drawingSourceWidth=width; drawingSourceHeight=height;
         overlay.setAttribute("viewBox",`0 0 ${width} ${height}`);
-        overlay.setAttribute("preserveAspectRatio","xMinYMin meet");
+        overlay.setAttribute("preserveAspectRatio","xMidYMid meet");
     }
     function pointerPosition(event,element){
+        // Converte a posição da tela para o sistema de coordenadas do SVG.
+        // Usar a matriz do SVG é importante quando o viewport muda de proporção:
+        // preserveAspectRatio="xMidYMid meet" cria margens (letterbox) e não
+        // podemos calcular X/Y com escalas independentes, senão o desenho "salta".
+        const svg=element;
+        try{
+            const ctm=svg.getScreenCTM?.();
+            if(ctm && typeof DOMPoint==="function"){
+                const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());
+                return {
+                    x:Math.max(0,Math.min(drawingSourceWidth||1,p.x)),
+                    y:Math.max(0,Math.min(drawingSourceHeight||1,p.y))
+                };
+            }
+        }catch{}
         const r=element.getBoundingClientRect();
-        const sx=drawingSourceWidth>0 ? drawingSourceWidth/Math.max(1,r.width) : 1;
-        const sy=drawingSourceHeight>0 ? drawingSourceHeight/Math.max(1,r.height) : 1;
-        return{x:Math.max(0,Math.min(drawingSourceWidth||r.width,(event.clientX-r.left)*sx)),y:Math.max(0,Math.min(drawingSourceHeight||r.height,(event.clientY-r.top)*sy))};
+        const width=Math.max(1,r.width),height=Math.max(1,r.height);
+        const sourceW=Math.max(1,drawingSourceWidth||width),sourceH=Math.max(1,drawingSourceHeight||height);
+        const scale=Math.min(width/sourceW,height/sourceH);
+        const ox=(width-sourceW*scale)/2,oy=(height-sourceH*scale)/2;
+        return {
+            x:Math.max(0,Math.min(sourceW,(event.clientX-r.left-ox)/Math.max(scale,0.0001))),
+            y:Math.max(0,Math.min(sourceH,(event.clientY-r.top-oy)/Math.max(scale,0.0001)))
+        };
     }
     function renderDrawingStylePanel(){
         if(cfg.public)return;
